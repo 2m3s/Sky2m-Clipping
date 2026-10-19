@@ -2,7 +2,7 @@
 
 All notable changes to Sky2M Clipping are listed here, newest first.
 
-## 3.0.0
+## 1.0
 
 ### Changed
 - Replace the early recorder with a port of Clipify by Vaguestan10: a rolling replay buffer with hardware video encoding (NVENC, AMF, QuickSync, or libx264), microphone and PC sound, an in-game Clips browser and editor (search, rename, trim, preview with sound, share links), a screenshot key and your own hotkeys. It downloads a checked FFmpeg build the first time it starts.
