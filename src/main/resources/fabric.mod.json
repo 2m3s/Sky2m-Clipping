@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "sky2m-clipping",
+  "version": "${version}",
+  "name": "Sky2M Clipping",
+  "description": "In-process replay clipping for Sky2M. Bundles Windows capture and encoding libraries; no recorder executable.",
+  "authors": ["2m3s"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "sky2m-clipping": ["com.epic60869.sky2m.clipping.ClippingEntrypoint"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "26.2",
+    "java": ">=25"
+  }
+}

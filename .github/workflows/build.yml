@@ -1,7 +1,8 @@
-name: Build
+name: Build Fabric JAR
 
 on:
   push:
+    branches: [main, jar-mod]
   pull_request:
   workflow_dispatch:
 
@@ -10,15 +11,17 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-java@v4
         with:
-          dotnet-version: 8.0.x
-      - name: Publish
-        run: dotnet publish src/Sky2MClips -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o publish
-      - name: SHA-256
-        shell: pwsh
-        run: (Get-FileHash publish/Sky2MClips.exe -Algorithm SHA256).Hash.ToLower()
-      - uses: actions/upload-artifact@v4
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
         with:
-          name: Sky2MClips
-          path: publish/Sky2MClips.exe
+          gradle-version: '9.5.1'
+      - name: Build Fabric mod JAR
+        run: gradle build
+      - name: Upload mod JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: sky2m-clipping
+          path: build/libs/*.jar

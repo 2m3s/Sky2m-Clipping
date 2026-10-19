@@ -1,0 +1,45 @@
+plugins {
+    id 'java'
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+group = project.maven_group
+version = project.mod_version
+base { archivesName = project.archives_base_name }
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+    def cv = "org.bytedeco:javacv:${project.javacv_version}"
+    def cpp = "org.bytedeco:javacpp:${project.javacpp_version}"
+    def ff = "org.bytedeco:ffmpeg:${project.ffmpeg_version}"
+    def jna = "net.java.dev.jna:jna:${project.jna_version}"
+    def jnaPlatform = "net.java.dev.jna:jna-platform:${project.jna_version}"
+    implementation cv
+    implementation cpp
+    implementation ff
+    implementation jna
+    implementation jnaPlatform
+    include cv
+    include cpp
+    include "org.bytedeco:javacpp:${project.javacpp_version}:windows-x86_64"
+    include ff
+    include "org.bytedeco:ffmpeg:${project.ffmpeg_version}:windows-x86_64"
+    include jna
+    include jnaPlatform
+}
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withSourcesJar()
+}
+tasks.withType(JavaCompile).configureEach {
+    options.release = 25
+    options.encoding = 'UTF-8'
+}
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand 'version': project.version }
+}
+jar {
+    from('LICENSE') { rename { "${it}_sky2m-clipping" } }
+}
