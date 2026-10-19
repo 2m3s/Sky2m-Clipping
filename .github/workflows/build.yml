@@ -1,0 +1,24 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Publish
+        run: dotnet publish src/Sky2MClips -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o publish
+      - name: SHA-256
+        shell: pwsh
+        run: (Get-FileHash publish/Sky2MClips.exe -Algorithm SHA256).Hash.ToLower()
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sky2MClips
+          path: publish/Sky2MClips.exe
