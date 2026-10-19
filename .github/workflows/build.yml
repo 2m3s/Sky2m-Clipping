@@ -2,7 +2,7 @@ name: Build Fabric JARs
 
 on:
   push:
-    branches: [jar-mod, testing]
+    branches: [main, jar-mod, testing]
     tags: ['v*']
   pull_request:
   workflow_dispatch:

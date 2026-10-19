@@ -6,14 +6,16 @@ Instant replay for [Sky2M](https://github.com/2m3s/Sky2M-26.2): keeps the last f
 
 ## Download
 
-Get the JAR for your Minecraft version from [Releases](https://github.com/2m3s/Sky2m-Clipping/releases) and put it in your `mods` folder next to Sky2M:
+Latest: **Sky2M Clipping 1.0**. Get the JAR for your Minecraft version from [Releases](https://github.com/2m3s/Sky2m-Clipping/releases/latest) and put it in your `mods` folder next to Sky2M and Fabric API, then restart the game:
 
-- `sky2m-clipping-<version>+26.2.jar` for Minecraft 26.2
-- `sky2m-clipping-<version>+26.3.jar` for Minecraft 26.3
+- `sky2m-clipping-1.0+26.2.jar` for Minecraft 26.2
+- `sky2m-clipping-1.0+26.3.jar` for Minecraft 26.3
 
-Sky2M can also download it for you: turn on **/s2 > Clips** and answer **Yes** when it asks, then restart the game.
+Sky2M can also download it for you: on the title screen it asks once whether to download the clipping mod; answer **Yes, download** and restart when it says so. Later you can use the Download button in **/s2 > Clips** or `/s2 clip download`. It always fetches the JAR for your Minecraft version from the latest release.
 
-Needs Fabric API. Recording uses Minecraft's **OpenGL** renderer: if Video Settings has the Graphics Backend set to Vulkan, switch it to OpenGL and restart.
+Windows only.
+
+Recording uses Minecraft's **OpenGL** renderer: if Video Settings has the Graphics Backend set to Vulkan, switch it to OpenGL and restart.
 
 ## With Sky2M
 
@@ -45,4 +47,6 @@ One source tree (`src/`) is built once per Minecraft version. `versions/<mc>/gra
 .\gradlew.bat build
 ```
 
-Both JARs land in `build/libs/`.
+Both JARs land in `build/libs/`. Pushes build them on GitHub Actions; pushing a `v*` tag also attaches them to that release.
+
+This replaced the older Sky2M Clips recorder program (a separate .exe), which is no longer used.
