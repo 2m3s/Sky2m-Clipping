@@ -4,3 +4,9 @@
 /*.iml
 *.user
 .vs/
+/versions/*/build/
+/versions/*/run/
+/logs/
+/Sky2M-26.2/
+/publish/
+/src/Sky2MClips/

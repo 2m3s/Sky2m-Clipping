@@ -1,45 +1,76 @@
 plugins {
-    id 'java'
-    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    id 'net.fabricmc.fabric-loom' version "${loom_version}" apply false
 }
-group = project.maven_group
-version = project.mod_version
-base { archivesName = project.archives_base_name }
-dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
-    def cv = "org.bytedeco:javacv:${project.javacv_version}"
-    def cpp = "org.bytedeco:javacpp:${project.javacpp_version}"
-    def ff = "org.bytedeco:ffmpeg:${project.ffmpeg_version}"
-    def jna = "net.java.dev.jna:jna:${project.jna_version}"
-    def jnaPlatform = "net.java.dev.jna:jna-platform:${project.jna_version}"
-    implementation cv
-    implementation cpp
-    implementation ff
-    implementation jna
-    implementation jnaPlatform
-    include cv
-    include cpp
-    include "org.bytedeco:javacpp:${project.javacpp_version}:windows-x86_64"
-    include ff
-    include "org.bytedeco:ffmpeg:${project.ffmpeg_version}:windows-x86_64"
-    include jna
-    include jnaPlatform
-}
-java {
-    toolchain.languageVersion = JavaLanguageVersion.of(25)
-    withSourcesJar()
-}
-tasks.withType(JavaCompile).configureEach {
-    options.release = 25
-    options.encoding = 'UTF-8'
-}
-processResources {
-    inputs.property 'version', project.version
-    filesMatching('fabric.mod.json') { expand 'version': project.version }
-}
-jar {
-    from('LICENSE') { rename { "${it}_sky2m-clipping" } }
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'net.fabricmc.fabric-loom'
+
+    group = rootProject.maven_group
+    version = "${rootProject.mod_version}+${project.minecraft_version}"
+    base { archivesName = rootProject.archives_base_name }
+
+    repositories {
+        maven { name = 'TerraformersMC'; url = 'https://maven.terraformersmc.com/releases/' }
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs = [rootProject.file('src/main/java'), file('src/main/java')]
+            resources.srcDirs = [rootProject.file('src/main/resources')]
+        }
+        test {
+            java.srcDirs = [rootProject.file('src/test/java')]
+        }
+    }
+
+    dependencies {
+        // Minecraft 26.x ships Mojang-mapped (non-obfuscated); no mappings line.
+        minecraft "com.mojang:minecraft:${project.minecraft_version}"
+        implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+        implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+        // Only the ModMenuApi interface is needed; Mod Menu itself is optional at runtime.
+        compileOnly "com.terraformersmc:modmenu:${rootProject.modmenu_version}"
+
+        testImplementation platform('org.junit:junit-bom:5.11.4')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    processResources {
+        def props = [version: project.version, minecraft_version: project.minecraft_version, loader_version: project.loader_version]
+        props.each { k, v -> inputs.property(k, v) }
+        filesMatching('fabric.mod.json') { expand props }
+    }
+
+    java {
+        toolchain.languageVersion = JavaLanguageVersion.of(25)
+        withSourcesJar()
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.release = 25
+        options.encoding = 'UTF-8'
+    }
+
+    test {
+        useJUnitPlatform()
+        ['sky2m-clipping.ffmpeg', 'sky2m-clipping.testUpload'].each { p ->
+            if (System.getProperty(p) != null) systemProperty p, System.getProperty(p)
+        }
+    }
+
+    jar {
+        from(rootProject.file('LICENSE')) { rename { "${it}_sky2m-clipping" } }
+    }
+
+    // Collects this version's mod jar into the root build/libs so both versions end up side by side.
+    tasks.named('build') {
+        doLast {
+            copy {
+                from(tasks.jar.archiveFile)
+                into(rootProject.layout.buildDirectory.dir('libs'))
+            }
+        }
+    }
 }

@@ -1,32 +1,48 @@
-# Sky2M Clipping — Fabric mod
+# Sky2M Clipping
 
-This branch replaces the standalone .NET executable project with a companion Fabric mod for Minecraft 26.2. Sky2M keeps the settings UI and save key; this mod provides the `sky2m-clipping` entrypoint. Recording runs inside Minecraft's JVM; no separate recorder executable is launched.
+Instant replay for [Sky2M](https://github.com/2m3s/Sky2M-26.2): keeps the last few seconds of gameplay recorded and saves them as an MP4 on a key press, with an in-game clip browser and editor.
 
-## Early Java port — known limitations
+**Clipify by Vaguestan10.** Sky2M Clipping is a modified version of [Clipify](https://github.com/itamarb2010-jpg/Clipify), used under its MIT with Attribution licence (see [LICENSE](LICENSE)). It is not made or endorsed by the Clipify author.
 
-- Captures the Minecraft window with FFmpeg's Windows `gdigrab` input and maintains a rolling buffer of short MP4 segments, then exports them to an MP4 when Sky2M requests a clip.
-- Attempts FFmpeg's `h264_nvenc` encoder; automatic software fallback is not implemented.
-- **Audio is not implemented yet.** Game-only, Discord, desktop audio, microphone and volume settings are accepted for API compatibility but are not currently recorded.
-- The requested output-height/quality setting is accepted but not yet applied.
-- Must be built and tested on Windows with Minecraft 26.2. CI compilation alone does not prove in-game capture works.
+## Download
 
-This is an early port, not feature parity with the former recorder.
+Get the JAR for your Minecraft version from [Releases](https://github.com/2m3s/Sky2m-Clipping/releases) and put it in your `mods` folder next to Sky2M:
 
-## Install
+- `sky2m-clipping-<version>+26.2.jar` for Minecraft 26.2
+- `sky2m-clipping-<version>+26.3.jar` for Minecraft 26.3
 
-Build with JDK 25 and Gradle 9.5.1, then put `sky2m-clipping-2.0.0.jar` in the Minecraft `mods` folder alongside Sky2M. The JAR packages JavaCV, FFmpeg's Windows x86-64 native libraries, and JNA as nested dependencies.
+Sky2M can also download it for you: turn on **/s2 > Clips** and answer **Yes** when it asks, then restart the game.
 
-## Sky2M API
+Needs Fabric API. Recording uses Minecraft's **OpenGL** renderer: if Video Settings has the Graphics Backend set to Vulkan, switch it to OpenGL and restart.
 
-- `configure(Map<String, Object>)`
-- `save(String)` → `CompletableFuture<Map<String, Object>>` with `path` and `seconds`
-- `status()` → `recording`, `encoder`, and `error`
-- `shutdown()`
+## With Sky2M
 
-## Build
+Sky2M finds this mod through its `sky2m-clipping` entrypoint and drives it:
+
+- **/s2 > Clips** turns recording on and off and sets the clip length, quality, frame rate, sound, microphone, volumes and folder (`Videos\Sky2M Clips`).
+- The **Save Clip** key and `/s2 clip [name]` save a clip; Sky2M prints a chat message with **[Open]** and **[Folder]** links.
+- `/s2 clip status` shows what the recorder is doing (for example downloading FFmpeg).
+
+Sky2M's settings are layered on top of this mod's own settings and are never written to its config. Without Sky2M, the mod works on its own with its settings screen (pause menu > Clips > Settings, or Mod Menu).
+
+Sound: the recorder captures everything your PC plays (WASAPI loopback) plus, optionally, your microphone. Sky2M's "Game only" and "Game + Discord" choices also record all PC sound.
+
+## Features
+
+- Rolling buffer of 5 seconds to 10 minutes, hardware encoding (NVENC, AMF, QuickSync) with a libx264 fallback, near-instant saves without re-encoding.
+- Microphone and PC audio with per-source volume.
+- Clips screen with search, rename, preview with sound, trimming, and optional share links.
+- Screenshot hotkey that also copies the picture to the clipboard.
+- As many hotkeys as you like, each clip key with its own length.
+
+On first start it downloads a SHA-256 checked FFmpeg build into `.minecraft/sky2m-clipping/bin` (or uses one on `PATH`). PC-audio capture compiles a small WASAPI helper with the C# compiler built into Windows.
+
+## Building
+
+One source tree (`src/`) is built once per Minecraft version. `versions/<mc>/gradle.properties` holds each version's Minecraft and Fabric versions, and `versions/<mc>/src` the few classes whose Minecraft API differs (`compat/`, the frame-capture mixin, `LinearImageTexture`).
 
 ```powershell
-gradle build
+.\gradlew.bat build
 ```
 
-The JAR is output under `build/libs/`.
+Both JARs land in `build/libs/`.

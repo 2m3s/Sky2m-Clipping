@@ -1,18 +1,48 @@
 {
-  "schemaVersion": 1,
-  "id": "sky2m-clipping",
-  "version": "${version}",
-  "name": "Sky2M Clipping",
-  "description": "In-process replay clipping for Sky2M. Bundles Windows capture and encoding libraries; no recorder executable.",
-  "authors": ["2m3s"],
-  "license": "MIT",
-  "environment": "client",
-  "entrypoints": {
-    "sky2m-clipping": ["com.epic60869.sky2m.clipping.ClippingEntrypoint"]
-  },
-  "depends": {
-    "fabricloader": ">=0.19.3",
-    "minecraft": "26.2",
-    "java": ">=25"
-  }
+	"schemaVersion": 1,
+	"id": "sky2m-clipping",
+	"version": "${version}",
+	"name": "Sky2M Clipping",
+	"description": "Instant replay clipping for Sky2M: keeps the last few seconds of gameplay and saves them as an MP4 on a key press, with an in-game clip editor. Based on Clipify by Vaguestan10.",
+	"authors": [
+		"2m3s"
+	],
+	"contributors": [
+		"Clipify by Vaguestan10"
+	],
+	"contact": {
+		"homepage": "https://github.com/2m3s/Sky2m-Clipping",
+		"sources": "https://github.com/2m3s/Sky2m-Clipping",
+		"issues": "https://github.com/2m3s/Sky2m-Clipping/issues"
+	},
+	"license": "MIT with Attribution (see LICENSE)",
+	"icon": "assets/sky2m-clipping/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"com.epic60869.sky2m.clipping.Sky2MClipping"
+		],
+		"sky2m-clipping": [
+			"com.epic60869.sky2m.clipping.Sky2MBridge"
+		],
+		"modmenu": [
+			"com.epic60869.sky2m.clipping.config.ModMenuIntegration"
+		]
+	},
+	"mixins": [
+		{
+			"config": "sky2m-clipping.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=${loader_version}",
+		"minecraft": "~${minecraft_version}",
+		"java": ">=25",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"sky2m": "*",
+		"modmenu": "*"
+	}
 }

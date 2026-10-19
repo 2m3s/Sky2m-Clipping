@@ -1,0 +1,13 @@
+{
+	"required": true,
+	"minVersion": "0.8",
+	"package": "com.epic60869.sky2m.clipping.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"client": [
+		"PauseScreenMixin",
+		"PresentMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}
