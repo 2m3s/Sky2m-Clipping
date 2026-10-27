@@ -2,7 +2,7 @@
 
 All notable changes to Sky2M Clipping are listed here, newest first.
 
-## Unreleased
+## 1.0.1
 
 ### Added
 - Watch clip links in game: any link to a video file in chat (the share links clips get, x0.at, Catbox, tmpfiles and others) gets a [Watch] button that plays it in a menu with sound. Click the video or press Space to pause, drag the bar to skip, Copy Link, and Esc to close. Also `/sky2mclip watch <link>`.

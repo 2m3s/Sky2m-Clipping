@@ -6,10 +6,10 @@ Instant replay for [Sky2M](https://github.com/2m3s/Sky2M-26.2): keeps the last f
 
 ## Download
 
-Latest: **Sky2M Clipping 1.0**. Get the JAR for your Minecraft version from [Releases](https://github.com/2m3s/Sky2m-Clipping/releases/latest) and put it in your `mods` folder next to Sky2M and Fabric API, then restart the game:
+Latest: **Sky2M Clipping 1.0.1**. Get the JAR for your Minecraft version from [Releases](https://github.com/2m3s/Sky2m-Clipping/releases/latest) and put it in your `mods` folder next to Sky2M and Fabric API, then restart the game:
 
-- `sky2m-clipping-1.0+26.2.jar` for Minecraft 26.2
-- `sky2m-clipping-1.0+26.3.jar` for Minecraft 26.3
+- `sky2m-clipping-1.0.1+26.2.jar` for Minecraft 26.2
+- `sky2m-clipping-1.0.1+26.3.jar` for Minecraft 26.3
 
 Sky2M can also download it for you: on the title screen it asks once whether to download the clipping mod; answer **Yes, download** and restart when it says so. Later you can use the Download button in **/s2 > Clips** or `/s2 clip download`. It always fetches the JAR for your Minecraft version from the latest release.
 
