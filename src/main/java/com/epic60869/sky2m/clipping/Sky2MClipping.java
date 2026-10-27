@@ -3,8 +3,18 @@ package com.epic60869.sky2m.clipping;
 import com.epic60869.sky2m.clipping.config.ClippingConfig;
 import com.epic60869.sky2m.clipping.config.ClippingConfig.Hotkey;
 import com.epic60869.sky2m.clipping.encode.ClipLibrary;
+import com.epic60869.sky2m.clipping.encode.VideoLinks;
+import com.epic60869.sky2m.clipping.ui.LinkPlayerScreen;
 import com.epic60869.sky2m.clipping.ui.Notifications;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.loader.api.FabricLoader;
@@ -49,6 +59,11 @@ public final class Sky2MClipping implements ClientModInitializer {
 		service = svc;
 
 		ClientTickEvents.END_CLIENT_TICK.register(this::onClientTick);
+		ClientReceiveMessageEvents.MODIFY_GAME.register((message, overlay) -> overlay ? message : addWatchButtons(message));
+		ClientCommandRegistrationCallback.EVENT.register((dispatcher, context) -> dispatcher.register(
+				ClientCommands.literal("sky2mclip").then(ClientCommands.literal("watch")
+						.then(ClientCommands.argument("link", StringArgumentType.greedyString())
+								.executes(c -> watch(StringArgumentType.getString(c, "link").trim()) ? 1 : 0)))));
 		// IMPORTANT: bootstrap() spawns FFmpeg subprocesses (including an NVENC probe that creates a
 		// GPU context). onInitializeClient runs BEFORE Minecraft initialises GLFW/OpenGL, and doing
 		// GPU-touching work concurrently with glfwInit intermittently breaks the NVIDIA driver's
@@ -89,9 +104,49 @@ public final class Sky2MClipping implements ClientModInitializer {
 		}
 	}
 
+	// ------------------------------------------------------------- watching clip links
+
+	/** A screen to open on the next tick: clicking a chat button closes the chat afterwards, which would hide it. */
+	private static volatile net.minecraft.client.gui.screens.Screen nextScreen;
+
+	/**
+	 * Opens the in-game player for a clip link (any http(s) link to a video file). Used by the [Watch] buttons and,
+	 * through {@link Sky2MBridge#watch}, by Sky2M's chat. False if it isn't a video link.
+	 */
+	public static boolean watch(String url) {
+		if (!VideoLinks.isVideoLink(url)) {
+			Notifications.error(Minecraft.getInstance(), "That isn't a video link.");
+			return false;
+		}
+		Minecraft client = Minecraft.getInstance();
+		client.execute(() -> nextScreen = new LinkPlayerScreen(null, url));
+		return true;
+	}
+
+	/** Adds a [Watch] button after a chat message for each clip link in it. */
+	private static Component addWatchButtons(Component message) {
+		List<String> links = VideoLinks.find(message.getString());
+		if (links.isEmpty()) {
+			return message;
+		}
+		MutableComponent out = message.copy();
+		for (String url : links) {
+			out.append(Component.literal(" [Watch]").withStyle(s -> s.withColor(ChatFormatting.AQUA).withBold(true)
+					.withClickEvent(new ClickEvent.RunCommand("/sky2mclip watch " + url))
+					.withHoverEvent(new HoverEvent.ShowText(Component.literal("Watch this clip in game\n")
+							.append(Component.literal(url).withStyle(ChatFormatting.GRAY))))));
+		}
+		return out;
+	}
+
 	// ------------------------------------------------------------- hotkeys
 
 	private void onClientTick(Minecraft client) {
+		net.minecraft.client.gui.screens.Screen open = nextScreen;
+		if (open != null) {
+			nextScreen = null;
+			client.gui.setScreen(open);
+		}
 		ReplayBufferService svc = service;
 		if (svc == null) {
 			return;

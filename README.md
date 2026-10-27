@@ -22,7 +22,8 @@ Recording works with both Graphics Backends in Video Settings, OpenGL and Vulkan
 Sky2M finds this mod through its `sky2m-clipping` entrypoint and drives it:
 
 - **/s2 > Clips** turns recording on and off and sets the clip length, quality, frame rate, sound, microphone, volumes and folder (`Videos\Sky2M Clips`).
-- The **Save Clip** key and `/s2 clip [name]` save a clip; Sky2M prints a chat message with **[Open]** and **[Folder]** links.
+- The **Save Clip** key and `/s2 clip [name]` save a clip; Sky2M prints a chat message with **[Open]**, **[Folder]** and **[Upload]** links. **[Upload]** gives you the clip's share link with **[Send in /s2c]**, **[Copy Link]** and **[Watch]**.
+- Clip links in /s2c show as **[Watch]**, which plays them in this mod's in-game player.
 - `/s2 clip status` shows what the recorder is doing (for example downloading FFmpeg).
 
 Sky2M's settings are layered on top of this mod's own settings and are never written to its config. Without Sky2M, the mod works on its own with its settings screen (pause menu > Clips > Settings, or Mod Menu).
@@ -34,6 +35,7 @@ Sound: the recorder captures everything your PC plays (WASAPI loopback) plus, op
 - Rolling buffer of 5 seconds to 10 minutes, hardware encoding (NVENC, AMF, QuickSync) with a libx264 fallback, near-instant saves without re-encoding.
 - Microphone and PC audio with per-source volume.
 - Clips screen with search, rename, preview with sound, trimming, and optional share links.
+- Watch clip links in game: any link to a video file in chat gets a **[Watch]** button that plays it in a menu with sound (or `/sky2mclip watch <link>`).
 - Screenshot hotkey that also copies the picture to the clipboard.
 - As many hotkeys as you like, each clip key with its own length.
 

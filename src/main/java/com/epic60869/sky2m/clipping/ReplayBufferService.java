@@ -657,17 +657,37 @@ public final class ReplayBufferService {
 			report(status, "That clip no longer exists.", true);
 			return;
 		}
+		if (!links.has(file)) {
+			if (status != null) {
+				client.execute(() -> status.accept("Uploading…"));
+			} else {
+				Notifications.uploading(client);
+			}
+		}
+		uploadLink(file).whenComplete((url, error) -> {
+			if (error == null) {
+				copyLink(url, status);
+			} else {
+				Throwable cause = error.getCause() != null ? error.getCause() : error;
+				report(status, "Upload failed: " + cause.getMessage(), true);
+			}
+		});
+	}
+
+	/**
+	 * The clip's share link: the one it already has, or a fresh upload. Used by the Clips screen and by Sky2M's
+	 * [Upload] button. Non-blocking; fails with an {@link ClipUploader.UploadException} the player can read.
+	 */
+	public CompletableFuture<String> uploadLink(Path file) {
+		if (file == null || !Files.isRegularFile(file)) {
+			return CompletableFuture.failedFuture(new ClipUploader.UploadException("That clip no longer exists."));
+		}
 		String cached = links.get(file);
 		if (cached != null) {
-			copyLink(cached, status);
-			return;
-		}
-		if (status != null) {
-			client.execute(() -> status.accept("Uploadingâ€¦"));
-		} else {
-			Notifications.uploading(client);
+			return CompletableFuture.completedFuture(cached);
 		}
 		ClippingConfig cfg = config;
+		CompletableFuture<String> result = new CompletableFuture<>();
 		worker.execute(() -> {
 			ClipUploader.Service target = switch (cfg.shareTarget) {
 				// CLIPS was Clipify's own upload server, which Sky2M Clipping doesn't use.
@@ -676,7 +696,7 @@ public final class ReplayBufferService {
 			};
 			// Upload a watermarked copy instead of the file itself: the "sky2m-clipping" mark lives only on the
 			// shared copy, never on the local clip. Same resolution and (near-)same quality as the
-			// recording â€” the link is meant to look like what was recorded.
+			// recording — the link is meant to look like what was recorded.
 			Path toUpload = file;
 			Path shareTmp = null;
 			try {
@@ -688,15 +708,18 @@ public final class ReplayBufferService {
 						toUpload = tmp;
 						shareTmp = tmp;
 					} catch (IOException wmErr) {
-						Sky2MClipping.LOGGER.warn("Watermark/downscale failed â€” uploading the raw clip instead", wmErr);
+						Sky2MClipping.LOGGER.warn("Watermark/downscale failed — uploading the raw clip instead", wmErr);
 					}
 				}
 				String url = ClipUploader.upload(toUpload, target, cfg.litterboxHours);
 				links.put(file, url);
-				copyLink(url, status);
+				result.complete(url);
 			} catch (ClipUploader.UploadException e) {
 				Sky2MClipping.LOGGER.error("Clip upload failed", e);
-				report(status, "Upload failed: " + e.getMessage(), true);
+				result.completeExceptionally(e);
+			} catch (RuntimeException e) {
+				Sky2MClipping.LOGGER.error("Clip upload failed", e);
+				result.completeExceptionally(new ClipUploader.UploadException("Upload failed: " + e.getMessage(), e));
 			} finally {
 				if (shareTmp != null) {
 					try {
@@ -707,6 +730,7 @@ public final class ReplayBufferService {
 				}
 			}
 		});
+		return result;
 	}
 
 	private void copyLink(String url, Consumer<String> status) {

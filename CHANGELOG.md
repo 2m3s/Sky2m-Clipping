@@ -4,6 +4,10 @@ All notable changes to Sky2M Clipping are listed here, newest first.
 
 ## Unreleased
 
+### Added
+- Watch clip links in game: any link to a video file in chat (the share links clips get, x0.at, Catbox, tmpfiles and others) gets a [Watch] button that plays it in a menu with sound. Click the video or press Space to pause, drag the bar to skip, Copy Link, and Esc to close. Also `/sky2mclip watch <link>`.
+- Sky2M can upload clips: its "Clip saved" message gets an [Upload] button that uses this mod's share link (uploading the clip if it has none yet), and its [Watch] buttons in /s2c open the player above.
+
 ### Changed
 - Fix the choppy, broken last second of saved clips: saving now waits for the second being recorded to finish (up to about a second) instead of copying it half-written, so clips end cleanly and include the moment you pressed the key.
 - Fix clips that were only a few seconds of choppy video at 1080p: when the encoder cannot keep up, the replay buffer now restarts at a smaller size instead of dropping most frames.

@@ -17,6 +17,8 @@ import java.util.concurrent.CompletableFuture;
  *   <li>{@code save(String name)}: saves a clip; the future gives {@code path} and {@code seconds}.</li>
  *   <li>{@code status()}: {@code recording}, {@code encoder} and {@code status}.</li>
  *   <li>{@code shutdown()}: Sky2M's Clips were turned off, so recording stops.</li>
+ *   <li>{@code upload(String path)}: the clip's share link, uploading it first if needed.</li>
+ *   <li>{@code watch(String url)}: plays a clip link in game.</li>
  * </ul>
  * With Sky2M installed, its Clips toggle decides whether anything is recorded. Without it, the mod runs on its own
  * settings.
@@ -119,5 +121,19 @@ public final class Sky2MBridge {
 	public void shutdown() {
 		settings = null;
 		refresh();
+	}
+
+	/** Sky2M's [Upload] on a saved clip: the clip's share link (uploading it if it has none yet). */
+	public CompletableFuture<String> upload(String path) {
+		ReplayBufferService svc = Sky2MClipping.service();
+		if (svc == null) {
+			return CompletableFuture.failedFuture(new IllegalStateException("Sky2M Clipping hasn't started yet."));
+		}
+		return svc.uploadLink(java.nio.file.Path.of(path));
+	}
+
+	/** Sky2M's [Watch] on a clip link in its chat: plays it in game. False if it isn't a video link. */
+	public boolean watch(String url) {
+		return Sky2MClipping.watch(url);
 	}
 }
