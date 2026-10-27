@@ -115,4 +115,20 @@ class CaptureMathTest {
 		assertEquals(6L, a.targetIndex());
 		assertEquals(0L, a.duplicates());
 	}
+
+	@Test
+	void gpuReadbackIsFlippedAndSwizzledToBgra() {
+		// 2x2 RGBA, bottom row first: bottom = (1,2,3,4) (5,6,7,8), top = (9,10,11,12) (13,14,15,16).
+		java.nio.ByteBuffer src = java.nio.ByteBuffer.allocateDirect(16);
+		for (int i = 1; i <= 16; i++) {
+			src.put((byte) i);
+		}
+		src.flip();
+		java.nio.ByteBuffer dst = java.nio.ByteBuffer.allocateDirect(16);
+		CaptureMath.rgbaBottomUpToBgraTopDown(src, dst, 2, 2);
+		byte[] got = new byte[16];
+		dst.get(got);
+		byte[] want = { 11, 10, 9, 12, 15, 14, 13, 16, 3, 2, 1, 4, 7, 6, 5, 8 };
+		org.junit.jupiter.api.Assertions.assertArrayEquals(want, got);
+	}
 }

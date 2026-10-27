@@ -1,5 +1,9 @@
 package com.epic60869.sky2m.clipping.capture;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.IntBuffer;
+
 /**
  * Pure helpers for capture sizing and constant-frame-rate timing.
  *
@@ -83,4 +87,30 @@ public final class CaptureMath {
 	 * @param duplicates   number of duplicate frames to emit before it
 	 */
 	public record Step(long originNanos, long targetIndex, long duplicates) {}
+
+	/**
+	 * Turns a GPU texture readback into what the encoder expects. Minecraft's textures come back
+	 * bottom row first in RGBA byte order on every backend (vanilla screenshots flip them the same
+	 * way); FFmpeg is fed top-down BGRA. Swaps R and B and reverses the row order in one pass.
+	 *
+	 * @param src {@code width * height} RGBA pixels, bottom row first, read from position 0
+	 * @param dst receives {@code width * height} BGRA pixels, top row first; left at position 0
+	 *            with its limit at the frame size
+	 */
+	public static void rgbaBottomUpToBgraTopDown(ByteBuffer src, ByteBuffer dst, int width, int height) {
+		IntBuffer in = src.duplicate().clear().order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
+		dst.clear();
+		IntBuffer out = dst.duplicate().order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
+		int[] row = new int[width];
+		for (int y = 0; y < height; y++) {
+			in.get((height - 1 - y) * width, row);
+			for (int x = 0; x < width; x++) {
+				int v = row[x];
+				// Little-endian RGBA is 0xAABBGGRR; BGRA is 0xAARRGGBB.
+				row[x] = (v & 0xFF00FF00) | ((v >>> 16) & 0xFF) | ((v & 0xFF) << 16);
+			}
+			out.put(y * width, row);
+		}
+		dst.limit(width * height * 4);
+	}
 }

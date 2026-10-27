@@ -69,6 +69,28 @@ public final class ClipAssembler {
 			AudioTrack audio, long videoOriginNanos) throws ClipException {
 		List<Segment> completed = readSegmentList(layout);
 		Path inProgress = findInProgressSegment(layout, completed);
+		// A copy of the segment FFmpeg is still writing ends part-way through a frame, and the hardware encoders'
+		// frames lean on each other, so the clip's last moments came out broken and choppy. Wait for that segment
+		// to finish (it is at most one segment long) and use only finished segments; the clip then also ends a
+		// little after the key press rather than before it.
+		if (inProgress != null) {
+			String waitingFor = inProgress.getFileName().toString();
+			long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(layout.segmentSeconds() * 1000L + 750L);
+			while (System.nanoTime() < deadline) {
+				List<Segment> now = readSegmentList(layout);
+				if (!now.isEmpty() && now.get(now.size() - 1).file().getFileName().toString().equals(waitingFor)) {
+					completed = now;
+					inProgress = null;
+					break;
+				}
+				try {
+					Thread.sleep(40L);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					break;
+				}
+			}
+		}
 
 		if (completed.isEmpty() && inProgress == null) {
 			throw new ClipException("The replay buffer is still filling up — try again in a few seconds.");
@@ -260,6 +282,12 @@ public final class ClipAssembler {
 			Path dest = workDir.resolve(String.format("part%04d.ts", index));
 			try {
 				Files.copy(inProgress, dest, StandardCopyOption.REPLACE_EXISTING);
+				// Only reached when the segment didn't finish in time: drop the half-written MPEG-TS packet at the
+				// end (packets are 188 bytes), so the concat doesn't read a cut-off one.
+				try (var channel = java.nio.channels.FileChannel.open(dest, java.nio.file.StandardOpenOption.WRITE)) {
+					long size = channel.size();
+					channel.truncate(size - size % 188);
+				}
 				if (Files.size(dest) > 0L) {
 					parts.add(dest);
 				}

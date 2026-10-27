@@ -15,7 +15,7 @@ Sky2M can also download it for you: on the title screen it asks once whether to 
 
 Windows only.
 
-Recording uses Minecraft's **OpenGL** renderer: if Video Settings has the Graphics Backend set to Vulkan, switch it to OpenGL and restart.
+Recording works with both Graphics Backends in Video Settings, OpenGL and Vulkan. OpenGL is the lighter of the two for recording: on Vulkan each frame is read back through Minecraft's own GPU API and converted on a background thread.
 
 ## With Sky2M
 

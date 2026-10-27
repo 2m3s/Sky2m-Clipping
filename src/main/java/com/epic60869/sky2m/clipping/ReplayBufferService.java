@@ -3,6 +3,7 @@ package com.epic60869.sky2m.clipping;
 import com.epic60869.sky2m.clipping.capture.CapturedFrame;
 import com.epic60869.sky2m.clipping.capture.FrameGrabber;
 import com.epic60869.sky2m.clipping.capture.FramePool;
+import com.epic60869.sky2m.clipping.capture.GpuFrameGrabber;
 import com.epic60869.sky2m.clipping.config.ClippingConfig;
 import com.epic60869.sky2m.clipping.encode.AudioCapture;
 import com.epic60869.sky2m.clipping.encode.ClipAssembler;
@@ -32,7 +33,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p>Two threads touch this class and each has a strict remit:
  * <ul>
- *   <li><b>Render thread</b> — {@link #onFramePresented} only. Everything OpenGL lives here, plus
+ *   <li><b>Render thread</b> — {@link #onFramePresented} and {@link #onFrameRendered} only. Everything GPU lives here, plus
  *       cheap state checks. It never allocates a process, never does file I/O, never blocks.</li>
  *   <li><b>{@code Sky2M Clipping-worker}</b> — a single background thread that starts and stops FFmpeg,
  *       probes encoders, downloads the binary and assembles clips. Serialising this work on one
@@ -42,7 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class ReplayBufferService {
 
 	/** Frames allowed in flight; also the cap on capture memory (frameBytes * this). */
-	private static final int FRAME_POOL_SIZE = 6;
+	private static final int FRAME_POOL_SIZE = 8;
 	/** How long a mismatched window aspect must persist before we restart at the new shape. */
 	private static final long ASPECT_RESTART_NANOS = TimeUnit.SECONDS.toNanos(3);
 	private static final long RESTART_BACKOFF_NANOS = TimeUnit.SECONDS.toNanos(10);
@@ -74,24 +75,38 @@ public final class ReplayBufferService {
 	private volatile VideoEncoder encoder;
 	private volatile ClipAssembler assembler;
 	private volatile String statusMessage = "Starting up";
-	/** Capture hooks the OpenGL buffer swap: with Minecraft's Vulkan renderer no frame ever arrives. */
-	private static final String NEEDS_OPENGL =
-			"Clips need the OpenGL renderer: set Graphics Backend to OpenGL in Video Settings and restart.";
-	private static final long OPENGL_GRACE_NANOS = TimeUnit.SECONDS.toNanos(10);
-	private volatile boolean sawGlFrame;
+	/**
+	 * Capture hooks Minecraft's window surface on every graphics backend, so this only shows when something (another
+	 * mod replacing the renderer, say) keeps frames from ever reaching it.
+	 */
+	private static final String NO_FRAMES =
+			"Clips are not receiving any frames from Minecraft's renderer; another mod may be replacing it. See the log.";
+	private static final long FRAME_GRACE_NANOS = TimeUnit.SECONDS.toNanos(10);
+	private volatile boolean sawFrame;
 	private volatile long bootstrapNanos;
 	private volatile boolean shuttingDown;
 	/** Path of the most recently saved clip, for the "Share last clip" action. */
 	private volatile Path lastSavedClip;
 
 	// --- render-thread-only state -------------------------------------------
+	/** OpenGL: reads the window's back buffer. */
 	private final FrameGrabber grabber = new FrameGrabber();
+	/** Every other backend (Vulkan): reads the presented texture through Minecraft's GPU API. */
+	private final GpuFrameGrabber gpuGrabber = new GpuFrameGrabber();
+	/** Which of the two the current recorder was attached to. */
+	private boolean useGpuGrabber;
+	/** The texture being presented this frame on the GPU-API path; null on OpenGL and between frames. */
+	private Object gpuFrameTexture;
 	private Stage stage = Stage.IDLE;
 	private SegmentRecorder recorder;
 	private FramePool pool;
 	private long nextCaptureNanos;
 	private long aspectMismatchSinceNanos;
 	private long restartNotBeforeNanos;
+	/** Shrinks (1 -> 0.67 -> 0.5 -> 0.34) when the encoder cannot keep up at the configured resolution. */
+	private double qualityScale = 1.0;
+	private long healthCheckNanos;
+	private long healthDropped;
 	private int activeFps;
 
 	/** Rolling audio capture (mic + desktop), running alongside the video recorder. */
@@ -134,13 +149,13 @@ public final class ReplayBufferService {
 	}
 
 	public String statusMessage() {
-		return noOpenGl() ? NEEDS_OPENGL : statusMessage;
+		return noFrames() ? NO_FRAMES : statusMessage;
 	}
 
-	/** True once the game has been up a while without presenting a single OpenGL frame (the Vulkan renderer). */
-	private boolean noOpenGl() {
+	/** True once the game has been up a while without a single frame reaching either capture hook. */
+	private boolean noFrames() {
 		long since = bootstrapNanos;
-		return !sawGlFrame && since != 0L && System.nanoTime() - since > OPENGL_GRACE_NANOS;
+		return !sawFrame && since != 0L && System.nanoTime() - since > FRAME_GRACE_NANOS;
 	}
 
 	public boolean isBuffering() {
@@ -228,7 +243,21 @@ public final class ReplayBufferService {
 	 * is presented. Must never throw into Minecraft.
 	 */
 	public void onFramePresented(int framebufferWidth, int framebufferHeight) {
-		sawGlFrame = true;
+		onFrame(framebufferWidth, framebufferHeight, null);
+	}
+
+	/**
+	 * The non-OpenGL counterpart of {@link #onFramePresented}: called just before Minecraft copies its finished frame
+	 * (world, HUD and any open GUI) to the window, with that frame's {@code GpuTextureView}. Must never throw into
+	 * Minecraft.
+	 */
+	public void onFrameRendered(Object texture, int width, int height) {
+		onFrame(width, height, texture);
+	}
+
+	private void onFrame(int framebufferWidth, int framebufferHeight, Object texture) {
+		sawFrame = true;
+		gpuFrameTexture = texture;
 		try {
 			tick(framebufferWidth, framebufferHeight);
 		} catch (Throwable t) {
@@ -237,6 +266,8 @@ public final class ReplayBufferService {
 			detachRecorder();
 			stage = Stage.FAILED;
 			restartNotBeforeNanos = System.nanoTime() + RESTART_BACKOFF_NANOS;
+		} finally {
+			gpuFrameTexture = null;
 		}
 	}
 
@@ -270,7 +301,10 @@ public final class ReplayBufferService {
 			return;
 		}
 		ClippingConfig cfg = config;
-		int[] size = com.epic60869.sky2m.clipping.capture.CaptureMath.fitCaptureSize(fbWidth, fbHeight, cfg.maxWidth, cfg.maxHeight);
+		int limitW = cfg.maxWidth > 0 ? cfg.maxWidth : fbWidth;
+		int limitH = cfg.maxHeight > 0 ? cfg.maxHeight : fbHeight;
+		int[] size = com.epic60869.sky2m.clipping.capture.CaptureMath.fitCaptureSize(fbWidth, fbHeight,
+				(int) (limitW * qualityScale), (int) (limitH * qualityScale));
 		int captureWidth = size[0];
 		int captureHeight = size[1];
 
@@ -334,7 +368,11 @@ public final class ReplayBufferService {
 		}
 		pendingRecorder = null;
 
-		if (!grabber.init(rec.width(), rec.height(), pool, this::onFrameCaptured)) {
+		useGpuGrabber = gpuFrameTexture != null;
+		boolean ready = useGpuGrabber
+				? gpuGrabber.init(rec.width(), rec.height(), pool, this::onFrameCaptured)
+				: grabber.init(rec.width(), rec.height(), pool, this::onFrameCaptured);
+		if (!ready) {
 			statusMessage = "The GPU rejected the capture surface; see the log.";
 			stage = Stage.FAILED;
 			restartNotBeforeNanos = System.nanoTime() + RESTART_BACKOFF_NANOS;
@@ -351,6 +389,7 @@ public final class ReplayBufferService {
 		audioCapture = pendingAudio;
 		pendingAudio = null;
 		stage = Stage.BUFFERING;
+		healthCheckNanos = 0L;
 		nextCaptureNanos = System.nanoTime();
 		aspectMismatchSinceNanos = 0L;
 		statusMessage = "Buffering";
@@ -371,6 +410,9 @@ public final class ReplayBufferService {
 		if (checkAspectDrift(now, fbWidth, fbHeight)) {
 			return;
 		}
+		if (checkEncoderKeepingUp(now, rec)) {
+			return;
+		}
 
 		// Pace to the configured frame rate. Rendering faster than this simply drops the extra
 		// frames; rendering slower is corrected by the encoder thread duplicating frames.
@@ -381,7 +423,11 @@ public final class ReplayBufferService {
 		// Re-base rather than accumulate so a long stall cannot produce a burst of catch-up frames.
 		nextCaptureNanos = (now - nextCaptureNanos > period * 4) ? now + period : nextCaptureNanos + period;
 
-		grabber.capture(fbWidth, fbHeight, now);
+		if (useGpuGrabber) {
+			gpuGrabber.capture(gpuFrameTexture, now);
+		} else {
+			grabber.capture(fbWidth, fbHeight, now);
+		}
 	}
 
 	/**
@@ -390,7 +436,9 @@ public final class ReplayBufferService {
 	 */
 	private boolean checkAspectDrift(long now, int fbWidth, int fbHeight) {
 		double windowAspect = (double) fbWidth / fbHeight;
-		double captureAspect = (double) grabber.width() / grabber.height();
+		double captureAspect = useGpuGrabber
+				? (double) gpuGrabber.width() / gpuGrabber.height()
+				: (double) grabber.width() / grabber.height();
 		if (Math.abs(windowAspect - captureAspect) / captureAspect < 0.02) {
 			aspectMismatchSinceNanos = 0L;
 			return false;
@@ -409,6 +457,36 @@ public final class ReplayBufferService {
 		return true;
 	}
 
+	/**
+	 * A 1080p60 raw pipe is too much for some machines: the encoder queue overflows and most frames are
+	 * dropped, so a saved clip holds a few seconds of choppy video. When more than a third of the frames
+	 * of the last few seconds were dropped, restart the buffer at a smaller size instead of staying broken.
+	 */
+	private boolean checkEncoderKeepingUp(long now, SegmentRecorder rec) {
+		if (healthCheckNanos == 0L) {
+			healthCheckNanos = now;
+			healthDropped = rec.framesDroppedQueueFull();
+			return false;
+		}
+		if (now - healthCheckNanos < 5_000_000_000L) {
+			return false;
+		}
+		long dropped = rec.framesDroppedQueueFull();
+		long delta = dropped - healthDropped;
+		healthCheckNanos = now;
+		healthDropped = dropped;
+		if (qualityScale <= 0.34 || delta < activeFps * 5L / 3L) {
+			return false;
+		}
+		qualityScale = qualityScale > 0.7 ? 0.67 : qualityScale > 0.5 ? 0.5 : 0.34;
+		Sky2MClipping.LOGGER.warn("Encoder cannot keep up ({} frames dropped in 5s); restarting the replay buffer at {}% size",
+				delta, Math.round(qualityScale * 100));
+		detachRecorder();
+		stage = Stage.IDLE;
+		healthCheckNanos = 0L;
+		return true;
+	}
+
 	/** Render thread → encoder thread handoff. */
 	private void onFrameCaptured(CapturedFrame frame) {
 		SegmentRecorder rec = recorder;
@@ -419,9 +497,16 @@ public final class ReplayBufferService {
 		}
 	}
 
-	/** Tears down GL resources here and hands the FFmpeg shutdown to the worker. */
+	/** Tears down GPU resources here and hands the FFmpeg shutdown to the worker. */
 	private void detachRecorder() {
+		SegmentRecorder statsRec = recorder;
+		if (statsRec != null) {
+			long skippedBusy = useGpuGrabber ? gpuGrabber.framesSkippedGpuBusy() : grabber.framesSkippedGpuBusy();
+			long noBuffer = useGpuGrabber ? gpuGrabber.framesDroppedNoBuffer() : grabber.framesDroppedNoBuffer();
+			Sky2MClipping.LOGGER.info("Capture stats: {} skipped (GPU busy), {} skipped (no free buffer)", skippedBusy, noBuffer);
+		}
 		grabber.close();
+		gpuGrabber.close();
 		SegmentRecorder rec = recorder;
 		recorder = null;
 		pool = null;
@@ -578,7 +663,7 @@ public final class ReplayBufferService {
 			return;
 		}
 		if (status != null) {
-			client.execute(() -> status.accept("Uploading…"));
+			client.execute(() -> status.accept("Uploadingâ€¦"));
 		} else {
 			Notifications.uploading(client);
 		}
@@ -591,7 +676,7 @@ public final class ReplayBufferService {
 			};
 			// Upload a watermarked copy instead of the file itself: the "sky2m-clipping" mark lives only on the
 			// shared copy, never on the local clip. Same resolution and (near-)same quality as the
-			// recording — the link is meant to look like what was recorded.
+			// recording â€” the link is meant to look like what was recorded.
 			Path toUpload = file;
 			Path shareTmp = null;
 			try {
@@ -603,7 +688,7 @@ public final class ReplayBufferService {
 						toUpload = tmp;
 						shareTmp = tmp;
 					} catch (IOException wmErr) {
-						Sky2MClipping.LOGGER.warn("Watermark/downscale failed — uploading the raw clip instead", wmErr);
+						Sky2MClipping.LOGGER.warn("Watermark/downscale failed â€” uploading the raw clip instead", wmErr);
 					}
 				}
 				String url = ClipUploader.upload(toUpload, target, cfg.litterboxHours);
@@ -644,8 +729,8 @@ public final class ReplayBufferService {
 	}
 
 	private String notReadyReason() {
-		if (noOpenGl()) {
-			return NEEDS_OPENGL;
+		if (noFrames()) {
+			return NO_FRAMES;
 		}
 		FfmpegProvider.State s = ffmpegProvider.state();
 		return switch (s) {
@@ -701,6 +786,7 @@ public final class ReplayBufferService {
 		// gone and the process is exiting anyway.
 		if (client.isSameThread()) {
 			grabber.close();
+			gpuGrabber.close();
 		}
 		if (rec != null) {
 			rec.stop();

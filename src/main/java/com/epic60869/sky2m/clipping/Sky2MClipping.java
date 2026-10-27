@@ -67,13 +67,25 @@ public final class Sky2MClipping implements ClientModInitializer {
 	}
 
 	/**
-	 * Called from {@link com.epic60869.sky2m.clipping.mixin.RenderSystemMixin} on the render thread once per
-	 * presented frame. Kept static and null-tolerant because the mixin can fire during early startup.
+	 * Called from {@link com.epic60869.sky2m.clipping.mixin.PresentMixin} on the render thread once per
+	 * presented frame with the OpenGL renderer. Kept static and null-tolerant because the mixin can fire during
+	 * early startup.
 	 */
 	public static void onFramePresented(int framebufferWidth, int framebufferHeight) {
 		ReplayBufferService svc = service;
 		if (svc != null) {
 			svc.onFramePresented(framebufferWidth, framebufferHeight);
+		}
+	}
+
+	/**
+	 * Called from {@link com.epic60869.sky2m.clipping.mixin.PresentMixin} on the render thread once per frame with
+	 * any other renderer (Vulkan), with the {@code GpuTextureView} about to be presented.
+	 */
+	public static void onFrameRendered(Object texture, int width, int height) {
+		ReplayBufferService svc = service;
+		if (svc != null) {
+			svc.onFrameRendered(texture, width, height);
 		}
 	}
 

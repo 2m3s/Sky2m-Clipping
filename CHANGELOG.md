@@ -2,6 +2,15 @@
 
 All notable changes to Sky2M Clipping are listed here, newest first.
 
+## Unreleased
+
+### Changed
+- Fix the choppy, broken last second of saved clips: saving now waits for the second being recorded to finish (up to about a second) instead of copying it half-written, so clips end cleanly and include the moment you pressed the key.
+- Fix clips that were only a few seconds of choppy video at 1080p: when the encoder cannot keep up, the replay buffer now restarts at a smaller size instead of dropping most frames.
+- Reduce choppy stretches in saved clips by giving the capture pipeline more spare frame buffers, and log how many frames capture skipped.
+- Record clips on the Vulkan graphics backend too, in both the 26.2 and 26.3 JARs. OpenGL keeps its existing, lighter capture path.
+- Only warn that clips are getting no frames when none reach the mod on any backend, instead of telling Vulkan players to switch to OpenGL.
+
 ## 1.0
 
 ### Changed
